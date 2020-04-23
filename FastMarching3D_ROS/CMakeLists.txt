@@ -31,6 +31,8 @@ add_message_files(
   GoalArray.msg
 )
 
+
+
 generate_messages(
   DEPENDENCIES
   std_msgs
@@ -56,6 +58,8 @@ add_executable(msfm3d msfm3d_node.cpp)
 target_link_libraries(msfm3d
   ${catkin_LIBRARIES}
 )
+
+add_dependencies(msfm3d ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(costmap_generator src/costmap_generator.cpp)
 target_link_libraries(costmap_generator

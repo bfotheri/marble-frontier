@@ -14,6 +14,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseArray.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
@@ -151,7 +152,6 @@ class Msfm3d
     Msfm3d(float map_resolution):
     frontierCloud(new pcl::PointCloud<pcl::PointXYZ>)
     {
-      reach = NULL;
       esdf.data = NULL;
       esdf.seen = NULL;
       frontier = NULL;
@@ -201,9 +201,7 @@ class Msfm3d
 
     float viewPoseObstacleDistance = 0.001; // view pose minimum distance from obstacles
 
-    double * reach; // reachability grid (output from reach())
     sensor_msgs::PointCloud2 PC2msg;
-    nav_msgs::Path pathmsg;
     // visualization_msgs::MarkerArray frontiermsg;
     octomap::OcTree* mytree; // OcTree object for holding Octomap
 
@@ -229,6 +227,8 @@ class Msfm3d
 
     ESDF esdf; // ESDF struct object
     Boundary bounds; // xyz boundary of possible goal locations
+
+    geometry_msgs::PoseArray frontier_centroids_msg;
 
     void callback(sensor_msgs::PointCloud2 msg); // Subscriber callback function for PC2 msg (ESDF)
     void callback_Octomap(const octomap_msgs::Octomap::ConstPtr msg); // Subscriber callback function for Octomap msg
@@ -297,20 +297,21 @@ bool Msfm3d::clusterFrontier(const bool print2File)
   ec.setInputCloud(frontierCloud);
   ec.extract(frontierClusterIndices);
 
-  // Iterate through clusters and write to file
-  int j = 0;
-  pcl::PCDWriter writer;
+  // Iterate through clusters and publish their centroids
+  frontier_centroids_msg.poses.clear();
   for (std::vector<pcl::PointIndices>::const_iterator it = frontierClusterIndices.begin(); it != frontierClusterIndices.end(); ++it){
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
     for (std::vector<int>::const_iterator pit=it->indices.begin(); pit!=it->indices.end(); ++pit){
-      if (print2File) cloud_cluster->points.push_back(frontierCloud->points[*pit]);
-      inliers->indices.push_back(*pit); // Indices to keep in frontierCloud
+      cloud_cluster->points.push_back(frontierCloud->points[*pit]);
     }
     Eigen::Vector4f centroid;
     pcl::compute3DCentroid (*cloud_cluster, centroid);
     ROS_WARN("CLUSTER CENTROID: x = %f, y = %f, z = %f", centroid[0], centroid[1], centroid[2]);
-
-    
+    geometry_msgs::Pose temp;
+    temp.position.x = centroid[0];
+    temp.position.y = centroid[1];
+    temp.position.z = centroid[2];
+    frontier_centroids_msg.poses.push_back(temp);
   }
 
   // Loop through the remaining points in frontierCloud and remove them from the frontier bool array
@@ -932,6 +933,7 @@ bool updateFrontier(Msfm3d& planner)
         }
         // if (!planner.esdf.seen[neighbor[5]]  && !(i == neighbor[5])) frontier = 1;
       }
+
       // Check if the point is on the ground if it is a ground robot
       if (frontier) {
         // Only consider frontiers on the floor
@@ -1093,10 +1095,9 @@ int main(int argc, char **argv)
   ROS_INFO("Subscribing to robot state...");
   ros::Subscriber sub2 = n.subscribe("odometry", 1, &Msfm3d::callback_position, &planner);
 
-  ros::Publisher pub1 = n.advertise<geometry_msgs::PointStamped>("nearest_frontier", 5);
-
   ros::Publisher pub3 = n.advertise<sensor_msgs::PointCloud2>("frontier", 5);
 
+  ros::Publisher pub1 = n.advertise<geometry_msgs::PoseArray>("frontier_centroids", 5);
 
 
   int i = 0;
@@ -1123,10 +1124,12 @@ int main(int argc, char **argv)
       i = planner.xyz_index3(planner.position);
       ROS_INFO("Index at Position: %d", i);
       if (planner.receivedMap) {
-        ROS_INFO("ESDF or Occupancy at Position: %f", planner.esdf.data[i]);
+        ROS_INFO("INSIDE PLANNER.receivedMap");
+        // ROS_INFO("ESDF or Occupancy at Position: %f", planner.esdf.data[i]);
         // Find frontier cells and add them to planner.frontier
         if (updateFrontier(planner)) {
           planner.updateFrontierMsg();
+          pub1.publish(planner.frontier_centroids_msg);
           pub3.publish(planner.frontiermsg);
           ROS_INFO("Frontier published!");
         }

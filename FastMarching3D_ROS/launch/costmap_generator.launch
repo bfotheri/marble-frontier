@@ -6,7 +6,7 @@
   <arg name="resolution" default="0.2" />
 
   <node pkg="msfm3d" type="costmap_generator" name="costmap_generator">
-    <param name="fixedFrame" type="string" value="world"/>
+    <param name="fixedFrame" type="string" value="map"/>
     <param name="rate" value="5.0"/>
     <param name="resolution" value="$(arg resolution)"/>
     <param name="untraversableDistance" value="0.05"/>

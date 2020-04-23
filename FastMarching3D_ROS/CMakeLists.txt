@@ -61,3 +61,23 @@ add_executable(costmap_generator src/costmap_generator.cpp)
 target_link_libraries(costmap_generator
   ${catkin_LIBRARIES}
 )
+
+#############
+## Install ##
+#############
+
+# Install all the launch files
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
+
+# Mark executables and/or libraries for installation
+install(TARGETS 
+  msfm3d
+  costmap_generator
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+

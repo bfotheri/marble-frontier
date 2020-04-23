@@ -306,17 +306,11 @@ bool Msfm3d::clusterFrontier(const bool print2File)
       if (print2File) cloud_cluster->points.push_back(frontierCloud->points[*pit]);
       inliers->indices.push_back(*pit); // Indices to keep in frontierCloud
     }
-    if (print2File) {
-      cloud_cluster->width = cloud_cluster->points.size ();
-      cloud_cluster->height = 1;
-      cloud_cluster->is_dense = true;
+    Eigen::Vector4f centroid;
+    pcl::compute3DCentroid (*cloud_cluster, centroid);
+    ROS_WARN("CLUSTER CENTROID: x = %f, y = %f, z = %f", centroid[0], centroid[1], centroid[2]);
 
-      std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size () << " data points." << std::endl;
-      std::stringstream ss;
-      ss << "pcl_clusters/cloud_cluster_" << j << ".pcd";
-      writer.write<pcl::PointXYZ> (ss.str (), *cloud_cluster, false); //*
-      j++;
-    }
+    
   }
 
   // Loop through the remaining points in frontierCloud and remove them from the frontier bool array
@@ -1043,28 +1037,6 @@ int main(int argc, char **argv)
   planner.esdf_or_octomap = esdf_or_octomap;
   planner.frame = global_frame;
 
-  // Vehicle speed and turnPenalty
-  float speed, turnPenalty;
-  n.param("global_planning/speed", speed, (float)1.0); // m/s
-  n.param("global_planning/turnPenalty", turnPenalty, (float)5.0); // deg/s
-  planner.speed = speed;
-  planner.turnPenalty = turnPenalty;
-  ROS_INFO("Turn penalty set to %0.1f percent", planner.turnPenalty*100.0);
-
-  // Replanning ticks
-  int replan_tick_limit;
-  n.param("global_planning/replan_ticks", replan_tick_limit, 15);
-  int goal_tick_limit;
-  n.param("global_planning/goal_ticks", goal_tick_limit, 100);
-  std::string replanTrigger;
-  n.param<std::string>("global_planning/replanTrigger", replanTrigger, "frontier");
-
-  // Minimum distance for a goal pose away from current position
-  float minGoalDist;
-  n.param("global_planning/minGoalDist", minGoalDist, (float)0.0);
-  float goalArrivalDist;
-  n.param("global_planning/goalArrivalDist", goalArrivalDist, (float)0.8);
-
   // Clustering Parameters
   float cluster_radius, min_cluster_size;
   n.param("global_planning/cluster_radius", cluster_radius, (float)(1.5*voxel_size)); // voxels
@@ -1073,70 +1045,6 @@ int main(int argc, char **argv)
   planner.cluster_radius = cluster_radius;
   planner.min_cluster_size = min_cluster_size;
 
-  // Goal Height fixing for air vehicle (For a quad with constrained AGL)
-  bool fixGoalHeightAGL;
-  float goalHeightAGL;
-  int dzFrontierVoxelWidth;
-  n.param("global_planning/fixGoalHeightAGL", fixGoalHeightAGL, false);
-  n.param("global_planning/goalHeightAGL", goalHeightAGL, (float)0.64);
-  n.param("global_planning/dzFrontierVoxelWidth", dzFrontierVoxelWidth, -1);
-  planner.fixGoalHeightAGL = fixGoalHeightAGL;
-  planner.goalHeightAGL = goalHeightAGL;
-  planner.dzFrontierVoxelWidth = dzFrontierVoxelWidth;
-
-  // Origin/Tunnel Entrance
-  float origin_x, origin_y, origin_z, entranceRadius;
-  n.param("global_planning/entrance_x", origin_x, (float)0.0);
-  n.param("global_planning/entrance_y", origin_y, (float)0.0);
-  n.param("global_planning/entrance_z", origin_z, (float)0.6);
-  n.param("global_planning/entrance_radius", entranceRadius, (float)10.0);
-  planner.origin[0] = origin_x;
-  planner.origin[1] = origin_y;
-  planner.origin[2] = origin_z;
-  planner.entranceRadius = entranceRadius;
-
-  // Vehicle camera field of View and max range
-  float verticalFoV, horizontalFoV, rMax, rMin;
-  n.param("global_planning/cameraVerticalFoV", verticalFoV, (float)30.0);
-  n.param("global_planning/cameraHorizontalFoV", horizontalFoV, (float)45.0);
-  n.param("global_planning/cameraMaxRange", rMax, (float)3.0);
-  n.param("global_planning/cameraMinRange", rMin, (float)0.2);
-  planner.camera.verticalFoV = verticalFoV;
-  planner.camera.horizontalFoV = horizontalFoV;
-  planner.camera.rMax = rMax;
-  planner.camera.rMin = rMin;
-
-  // robot2camera 3-2-1 rotation angles
-  float roll, pitch, yaw;
-  Eigen::Matrix3f R_roll, R_pitch, R_yaw;
-  n.param("global_planning/robot2camera_roll", roll, (float)0.0);
-  n.param("global_planning/robot2camera_pitch", pitch, (float)0.0);
-  n.param("global_planning/robot2camera_yaw", yaw, (float)0.0);
-  R_roll.setZero();
-  R_roll(0,0) = 1.0;
-  R_roll(1,1) = std::cos((M_PI/180.0)*roll);
-  R_roll(1,2) = -std::sin((M_PI/180.0)*roll);
-  R_roll(2,1) = std::sin((M_PI/180.0)*roll);
-  R_roll(2,2) = std::cos((M_PI/180.0)*roll);
-  R_pitch.setZero();
-  R_pitch(0,0) = std::cos((M_PI/180.0)*pitch);
-  R_pitch(0,2) = std::sin((M_PI/180.0)*pitch);
-  R_pitch(2,0) = -std::sin((M_PI/180.0)*pitch);
-  R_pitch(2,2) = std::cos((M_PI/180.0)*pitch);
-  R_pitch(1,1) = 1.0;
-  R_yaw.setZero();
-  R_yaw(0,0) = std::cos((M_PI/180.0)*yaw);
-  R_yaw(0,1) = -std::sin((M_PI/180.0)*yaw);
-  R_yaw(1,0) = std::sin((M_PI/180.0)*yaw);
-  R_yaw(1,1) = std::cos((M_PI/180.0)*yaw);
-  R_yaw(2,2) = 1.0;
-  planner.robot2camera.R = R_roll*R_pitch*R_yaw;
-  ROS_INFO("Camera rotation matrix: [%0.2f, %0.2f, %0.2f; %0.2f, %0.2f, %0.2f; %0.2f, %0.2f, %0.2f]", planner.robot2camera.R(0,0),
-    planner.robot2camera.R(0,1), planner.robot2camera.R(0,2), planner.robot2camera.R(1,0), planner.robot2camera.R(1,1), planner.robot2camera.R(1,2),
-    planner.robot2camera.R(2,0), planner.robot2camera.R(2,1), planner.robot2camera.R(2,2));
-
-  // planner.bubble_radius = 3.0;
-  // Set planner bounds so that the robot doesn't exit a defined volume
   bool fenceOn;
   float fence_x_min, fence_x_max, fence_y_min, fence_y_max, fence_z_min, fence_z_max;
   n.param("global_planning/fenceOn", fenceOn, false);
@@ -1176,21 +1084,6 @@ int main(int argc, char **argv)
   float updateRate;
   n.param("global_planning/updateRate", updateRate, (float)1.0); // Hz
 
-  // Width to inflate obstacles for path planning
-  float inflateWidth;
-  n.param("global_planning/inflateWidth", inflateWidth, (float)0.0); // meters
-  planner.inflateWidth = inflateWidth;
-
-  // Closest goal or max utility
-  std::string goalFunction;
-  n.param<std::string>("global_planning/goalFunction", goalFunction, "information");
-
-  // minViewCloudSize
-  n.param("global_planning/minViewCloudSize", planner.minViewCloudSize, 1);
-
-  // View pose minimum obstacle distance
-  n.param("global_planning/viewPoseObstacleDistance", planner.viewPoseObstacleDistance, (float)0.01);
-
   ROS_INFO("Subscribing to Occupancy Grid...");
   ros::Subscriber sub0 = n.subscribe("octomap_binary", 1, &Msfm3d::callback_Octomap, &planner);
 
@@ -1202,13 +1095,7 @@ int main(int argc, char **argv)
 
   ros::Publisher pub1 = n.advertise<geometry_msgs::PointStamped>("nearest_frontier", 5);
 
-  // Publish goal point to interface with btraj
-  ros::Publisher pub4 = n.advertise<geometry_msgs::PoseStamped>("frontier_goal_pose", 5);
-
-
-  // ros::Publisher pub3 = n.advertise<visualization_msgs::MarkerArray>("/X1/frontier", 100);
   ros::Publisher pub3 = n.advertise<sensor_msgs::PointCloud2>("frontier", 5);
-
 
 
 
@@ -1243,6 +1130,7 @@ int main(int argc, char **argv)
           pub3.publish(planner.frontiermsg);
           ROS_INFO("Frontier published!");
         }
+      }
     }
 
   }

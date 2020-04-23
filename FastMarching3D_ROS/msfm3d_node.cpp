@@ -199,6 +199,8 @@ class Msfm3d
     float inflateWidth = 0.0;
     int minViewCloudSize = 10;
 
+
+
     float viewPoseObstacleDistance = 0.001; // view pose minimum distance from obstacles
 
     sensor_msgs::PointCloud2 PC2msg;
@@ -306,7 +308,7 @@ bool Msfm3d::clusterFrontier(const bool print2File)
     }
     Eigen::Vector4f centroid;
     pcl::compute3DCentroid (*cloud_cluster, centroid);
-    ROS_WARN("CLUSTER CENTROID: x = %f, y = %f, z = %f", centroid[0], centroid[1], centroid[2]);
+    // ROS_WARN("CLUSTER CENTROID: x = %f, y = %f, z = %f", centroid[0], centroid[1], centroid[2]);
     geometry_msgs::Pose temp;
     temp.position.x = centroid[0];
     temp.position.y = centroid[1];
@@ -1081,6 +1083,17 @@ int main(int argc, char **argv)
   planner.vehicleVolume.ymax = vehicleVolumeYmax;
   planner.vehicleVolume.zmin = vehicleVolumeZmin;
   planner.vehicleVolume.zmax = vehicleVolumeZmax;
+
+  // Origin/Tunnel Entrance
+  float origin_x, origin_y, origin_z, entranceRadius;
+  n.param("global_planning/entrance_x", origin_x, (float)0.0);
+  n.param("global_planning/entrance_y", origin_y, (float)0.0);
+  n.param("global_planning/entrance_z", origin_z, (float)0.6);
+  n.param("global_planning/entrance_radius", entranceRadius, (float)10.0);
+  planner.origin[0] = origin_x;
+  planner.origin[1] = origin_y;
+  planner.origin[2] = origin_z;
+  planner.entranceRadius = entranceRadius;
 
   // Get planner operating rate in Hz
   float updateRate;
